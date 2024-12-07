@@ -1,0 +1,136 @@
+name: openwrt
+
+run-name: openwrt build
+
+on:
+  # 手动触发工作流程
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'device type'
+        type: choice
+        options:
+          # 注意,这里需要和根目录下的设备目录名称一致
+          - 'x86-64'
+          - 'h28k'
+        required: true
+        default: 'x86-64'
+
+# 定时触发工作流程
+# UTC时间每天18点触发工作流程(北京时间:02:00)
+#on:
+#  schedule:
+#    - cron: '0 18 * * *'
+
+# 允许读取仓库内容
+permissions:
+  actions: read
+  contents: read
+
+env:
+  REPO_URL: https://github.com/coolsnowwolf/lede
+  REPO_BRANCH: master
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  SETTING_FILE: setting.sh
+  TZ: Asia/Shanghai
+
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  build:
+    name: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 480
+
+    steps:
+
+      - name: checkout
+        uses: actions/checkout@main
+
+      - name: setup python2
+        uses: actions/setup-python@main
+        with:
+          python-version: 'pypy2.7'
+
+      - name: init environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi `docker images -q`
+          sudo -E rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d /usr/local/lib/android
+          sudo -E apt-mark hold grub-efi-amd64-signed
+          sudo -E apt update
+          sudo -E apt -y purge azure-cli* docker* ghc* zulu* llvm* firefox google* dotnet* powershell* openjdk* mysql* php* mongodb* dotnet* snap*
+          sudo -E apt -y full-upgrade
+          sudo -E apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool llvm lrzsz genisoimage msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+          sudo -E systemctl daemon-reload
+          sudo -E apt -y autoremove --purge
+          sudo -E apt clean
+          sudo -E timedatectl set-timezone "$TZ"
+
+      - name: clone source code
+        run: git clone $REPO_URL -b $REPO_BRANCH openwrt
+
+      - name: settings
+        run : |
+          mv openwrt/feeds.conf.default openwrt/feeds.conf.default.bak
+          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+          mv openwrt/package/base-files/files/bin/config_generate openwrt/package/base-files/files/bin/config_generate.bak
+          [ -e config_generate ] && mv config_generate openwrt/package/base-files/files/bin/config_generate
+
+      - name: update feeds
+        working-directory: openwrt
+        run: ./scripts/feeds update -a
+
+      - name: install feeds
+        working-directory: openwrt
+        run: ./scripts/feeds install -a
+
+      - name: custom setting
+        run: |
+          chmod +x $SETTING_FILE
+          cd openwrt
+          $GITHUB_WORKSPACE/$SETTING_FILE
+
+      - name: load device config
+        run: cp -a ${{ github.event.inputs.device }}/$CONFIG_FILE openwrt/.config
+
+      - name: make download
+        working-directory: openwrt
+        run: make download -j$(nproc)
+
+      - name: compile
+        working-directory: openwrt
+        run: |
+          echo -e "$(nproc) thread compile"
+          make -j$(nproc) || make -j1
+          cd openwrt/bin/targets/*/*
+          rm -rf packages
+          echo "RELEASE=$PWD" >> "$GITHUB_ENV"
+          echo "status=success" >> "$GITHUB_OUTPUT"
+
+      - name: upload
+        uses: actions/upload-artifact@main
+        if: steps.compile.outputs.status == 'success'
+        with:
+          name: openwrt.${{ github.event.inputs.device }}.$(date +"%Y%m%d%H%M%S")
+          path: ${{ env.RELEASE }}
+          if-no-files-found: error
+
+      - name: release
+        uses: softprops/action-gh-release@master
+        with:
+          files: ${{ env.RELEASE }}/*
+          tag_name: openwrt.${{ github.event.inputs.device }}.$(date +"%Y%m%d")
+          body: openwrt build for ${{ github.event.inputs.device }}
+
+            
+
+
+
+
