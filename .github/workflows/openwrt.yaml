@@ -108,9 +108,9 @@ jobs:
           echo ${{ github.event.inputs.lan }} > lan.txt
           echo "LAN=$(cut -d '.' -f 1-3 lan.txt).1" >> "$GITHUB_ENV"
           
-          echo ${{ env.LAN }}
-          sed -i '/^[[:space:]]*set network.$1.netmask=/a\                                set network.$1.dns="${{ env.LAN }}"' openwrt/package/base-files/files/bin/config_generate
-          sed -i '/^[[:space:]]*set network.$1.netmask=/a\                                set network.$1.gateway="${{ env.LAN }}"' openwrt/package/base-files/files/bin/config_generate
+          echo $LAN
+          sed -i '/^[[:space:]]*set network.$1.netmask=/a\                                set network.$1.dns="$LAN"' openwrt/package/base-files/files/bin/config_generate
+          sed -i '/^[[:space:]]*set network.$1.netmask=/a\                                set network.$1.gateway="$LAN"' openwrt/package/base-files/files/bin/config_generate
           cat openwrt/package/base-files/files/bin/config_generate
 
 #      - name: 7.set feeds
