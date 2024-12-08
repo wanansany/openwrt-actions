@@ -135,9 +135,7 @@ jobs:
           $GITHUB_WORKSPACE/$SETTING_FILE
 
       - name: 12.load device config
-        run: |
-          cp -a devices/${{ github.event.inputs.device }}/$CONFIG_FILE openwrt/.config
-          make oldconfig
+        run: cp -a devices/${{ github.event.inputs.device }}/$CONFIG_FILE openwrt/.config
 
       - name: 13.make download
         working-directory: openwrt
