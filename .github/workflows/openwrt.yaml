@@ -148,7 +148,7 @@ jobs:
         run: |
           echo -e "$(nproc) thread compile"
           make -j$(nproc) || make -j1 V=s
-          echo "::set-output name=status::success"
+          echo "status=success" >> "$GITHUB_OUTPUT"
 
       - name: 15.check disk space
         if: (!cancelled())
