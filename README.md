@@ -1,4 +1,4 @@
-# Openwrt 固件
+# Openwrt 固件(精简)
 
 
 
@@ -18,7 +18,7 @@
 
 
 
-> 杂谈：想来想去，软路由还是干好软路由该干的事情就够了（自己设备性能不够哈哈哈），就只安装了以上的一些插件。
+> 想来想去，软路由还是干好软路由该干的事情就够了，所以就只安装了以上的一些插件。
 
 
 
@@ -26,7 +26,7 @@
 
 ![run_workflow](./images/run_workflow.png)
 
-你可以在[Run workflow](https://github.com/wanansany/openwrt-actions/actions/workflows/openwrt.yaml)这选择固件对应的设备，以及固件默认的IP（一般不需要改，如果改请一定保证IP格式正确），然后等待它编译完成。
+你可以在[Run workflow](https://github.com/wanansany/openwrt-actions/actions/workflows/openwrt.yaml)这选择固件对应的设备，以及固件默认的IP，然后等待它编译完成就好。
 
 
 
