@@ -1,14 +1,14 @@
 #!/bin/bash
 
 rm -rf feeds/packages/lang/golang
-git clone https://github.com/kenzok8/golang feeds/packages/lang/golang
+git clone -b main https://github.com/kenzok8/golang.git feeds/packages/lang/golang
 
 
 git clone -b lua https://github.com/sbwml/luci-app-alist package/downloads/alist
 
-git clone https://github.com/esirplayground/luci-app-poweroff package/downloads/luci-app-poweroff
+git clone -b master https://github.com/esirplayground/luci-app-poweroff.git package/downloads/luci-app-poweroff
 
-git clone https://github.com/wangqn/luci-app-filebrowser package/downloads/luci-app-filebrowser
+git clone -b master https://github.com/wangqn/luci-app-filebrowser.git package/downloads/luci-app-filebrowser
 
 
 rm -rf package/feeds/luci/luci-app-unblockmusic
