@@ -166,15 +166,15 @@ jobs:
           echo "FILENAME=openwrt.${{ github.event.inputs.device }}.$(date +'%Y%m%d')" >> "$GITHUB_ENV"
           echo "status=success" >> "$GITHUB_OUTPUT"
 
-     - name: 17.upload
-       uses: actions/upload-artifact@main
-       if: steps.organize.outputs.status == 'success'
-       with:
-         name: ${{ env.FILENAME }}
-         path: ${{ env.FILEPATH }}
-         compression-level: 9
-         retention-days: 7
-         if-no-files-found: error
+      - name: 17.upload
+        uses: actions/upload-artifact@main
+        if: steps.organize.outputs.status == 'success'
+        with:
+          name: ${{ env.FILENAME }}
+          path: ${{ env.FILEPATH }}
+          compression-level: 9
+          retention-days: 7
+          if-no-files-found: error
 
       - name: 18.release
         if: steps.organize.outputs.status == 'success'
