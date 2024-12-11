@@ -161,21 +161,22 @@ jobs:
         run: |
           cd bin/targets/*/*
           rm -rf packages
+          echo "DATETIME=$(date +'%Y年%m月%d日%H时%M分')" >> "$GITHUB_ENV"
           echo "FILEPATH=$PWD" >> "$GITHUB_ENV"
           echo "FILENAME=openwrt.${{ github.event.inputs.device }}.$(date +'%Y%m%d')" >> "$GITHUB_ENV"
           echo "status=success" >> "$GITHUB_OUTPUT"
 
-#      - name: 17.upload
-#        uses: actions/upload-artifact@main
-#        if: steps.organize.outputs.status == 'success'
-#        with:
-#          name: ${{ env.FILENAME }}
-#          path: ${{ env.FILEPATH }}
-#          compression-level: 9
-#          retention-days: 7
-#          if-no-files-found: error
+     - name: 17.upload
+       uses: actions/upload-artifact@main
+       if: steps.organize.outputs.status == 'success'
+       with:
+         name: ${{ env.FILENAME }}
+         path: ${{ env.FILEPATH }}
+         compression-level: 9
+         retention-days: 7
+         if-no-files-found: error
 
-      - name: 17.release
+      - name: 18.release
         if: steps.organize.outputs.status == 'success'
         uses: softprops/action-gh-release@master
         with:
@@ -187,7 +188,7 @@ jobs:
 
             📂 源码: ${{ env.REPO_URL }}
 
-            ⏱️ 编译时间: $(date +"%Y年%m月%d日%H时%M分")
+            ⏱️ 编译时间: ${{ env.DATETIME }}
 
             🌐 管理地址: ${{ github.event.inputs.lan }}
 
