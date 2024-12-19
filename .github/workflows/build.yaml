@@ -1,0 +1,186 @@
+name: Build
+
+run-name: OpenWrt Build
+
+on:
+  # 手动触发工作流程
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "Device"
+        type: choice
+        options:
+          # 注意,这里需要和根目录下的设备目录名称一致
+          - "x86-64"
+          - "h28k"
+        required: true
+        default: "x86-64"
+      lan:
+        description: "Lan IP"
+        type: string
+        required: true
+        default: "192.168.1.1"
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  REPO_URL: https://github.com/coolsnowwolf/lede
+  REPO_BRANCH: master
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  SETTING_FILE: setting.sh
+  TZ: Asia/Shanghai
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: build job
+    runs-on: ubuntu-24.04
+    timeout-minutes: 480
+
+    steps:
+      - name: 1.view server info
+        run: |
+          echo "若分配的服务器性能不足，务必及时取消，重新运行！"
+          echo -e "------------------------------- CPU信息 -------------------------------\n"
+          echo "CPU物理数量:$(cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l)"
+          echo -e "CPU核心及版本信息: $(cat /proc/cpuinfo | grep name | cut -f2 -d: | uniq -c) \n"
+          echo -e "------------------------------- 内存信息 -------------------------------\n"
+          echo "已安装内存详细信息: "
+          sudo lshw -short -C memory | grep GiB
+          echo -e "\n"
+          echo -e "------------------------------- 磁盘信息 -------------------------------\n"
+          echo -e "磁盘数量: $(ls /dev/sd* | grep -v [1-9] | wc -l) \n"
+          echo "------------------------------- 磁盘详情 -------------------------------\n"
+          df -Th
+
+      - name: 2.checkout
+        uses: actions/checkout@v4
+
+      - name: 3.setup python2
+        uses: actions/setup-python@v5
+        with:
+          python-version: "pypy2.7"
+
+      - name: 4.init env
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo docker image prune --all --force
+          sudo -E rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo -E cp -a ./ubuntu.sources /etc/apt/sources.list.d/
+          sudo -E apt -qq update
+          sudo -E apt -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool llvm lrzsz genisoimage msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+          sudo -E systemctl daemon-reload
+          sudo -E apt -qq autoremove --purge
+          sudo -E apt -qq clean
+          sudo -E timedatectl set-timezone "$TZ"
+          sudo mkdir -p /mnt/openwrt
+          sudo chown $USER:$GROUPS /mnt/openwrt
+
+      - name: 5.clone source code
+        working-directory: /mnt
+        run: |
+          df -hT $PWD
+          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf /mnt/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: 6.set lan ip
+        if: ${{ inputs.lan }} != '192.168.1.1'
+        run: |
+          sed -i 's/192.168.1.1/${{ inputs.lan }}/g' openwrt/package/base-files/files/bin/config_generate
+          echo ${{ inputs.lan }} > lan.txt
+          echo "LAN_GATEWAY=$(cut -d '.' -f 1-3 lan.txt).1" >> "$GITHUB_ENV"
+          rm -rf lan.txt
+
+      - name: 7.set lan gateway
+        run: |
+          sed -i '/^[[:space:]]*set network.$1.netmask=/a\                                set network.$1.dns="${{ env.LAN_GATEWAY }}"' openwrt/package/base-files/files/bin/config_generate
+          sed -i '/^[[:space:]]*set network.$1.netmask=/a\                                set network.$1.gateway="${{ env.LAN_GATEWAY }}"' openwrt/package/base-files/files/bin/config_generate
+
+      - name: 8.set feeds
+        run: |
+          mv openwrt/$FEEDS_CONF openwrt/$FEEDS_CONF.bak
+          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/$FEEDS_CONF
+
+      - name: 9.update feeds
+        working-directory: openwrt
+        run: ./scripts/feeds update -a
+
+      - name: 10.install feeds
+        working-directory: openwrt
+        run: ./scripts/feeds install -a
+
+      - name: 11.custom setting
+        run: |
+          chmod +x $SETTING_FILE
+          cd openwrt
+          $GITHUB_WORKSPACE/$SETTING_FILE
+
+      - name: 12.load device config
+        run: |
+          cp -a devices/${{ inputs.device }}/$CONFIG_FILE openwrt/.config
+
+      - name: 13.make download
+        working-directory: openwrt
+        run: make download -j$(nproc)
+
+      - name: 14.compile
+        id: compile
+        working-directory: openwrt
+        run: |
+          echo -e "$(nproc) thread compile"
+          make -j$(nproc) || make -j1 V=s
+          echo "status=success" >> "$GITHUB_OUTPUT"
+
+      - name: 15.check disk space
+        if: (!cancelled())
+        run: df -hT
+
+      - name: 16.organize files
+        id: organize
+        working-directory: openwrt
+        if: steps.compile.outputs.status == 'success' && !cancelled()
+        run: |
+          cd bin/targets/*/*
+          rm -rf packages
+          echo "BUILD_TIME=$(date +'%Y年%m月%d日%H时%M分')" >> "$GITHUB_ENV"
+          echo "TARGET_PATH=$PWD" >> "$GITHUB_ENV"
+          echo "TAG_NAME=openwrt.${{ inputs.device }}.$(date +'%Y%m%d')" >> "$GITHUB_ENV"
+          echo "status=success" >> "$GITHUB_OUTPUT"
+
+      - name: 17.upload
+        uses: actions/upload-artifact@v4
+        if: steps.organize.outputs.status == 'success'
+        with:
+          name: ${{ env.TAG_NAME }}
+          path: ${{ env.TARGET_PATH }}
+          compression-level: 9
+          #保留期,默认保留90天
+          #retention-days: 7
+          if-no-files-found: error
+
+      - name: 18.release
+        if: steps.organize.outputs.status == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.TAG_NAME }}
+          files: ${{ env.TARGET_PATH }}/*
+          body: |
+            💻 设备: ${{ inputs.device }}
+
+            📂 源码: ${{ env.REPO_URL }}
+
+            ⏱️ 编译时间: ${{ env.BUILD_TIME }}
+
+            🌐 管理地址: ${{ inputs.lan }}
+
+            👤 用户名: root
+
+            🔒 密码: password
